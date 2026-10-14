@@ -29,7 +29,14 @@
 #define PPC_EXTERN_FUNC(x) extern PPC_FUNC(x)
 #define PPC_WEAK_FUNC(x) __attribute__((weak,noinline)) PPC_FUNC(x)
 
+// Debugging (PS3): with -DPPC_CHECK_R1 every function reports when r1 on return differs from r1 on entry.
+#ifdef PPC_CHECK_R1
+void ppc_check_r1_warning(const char* f, uint32_t before, uint32_t after);
+template <class C> struct PPCCheckR1 { C& c; uint32_t r1; const char* f; ~PPCCheckR1() { if (c.r1.u32 != r1) ppc_check_r1_warning(f, r1, c.r1.u32); } };
+#define PPC_FUNC_PROLOGUE() __builtin_assume(((size_t)base & 0x1F) == 0); PPCCheckR1<PPCContext> __cr1{ctx, ctx.r1.u32, __func__}
+#else
 #define PPC_FUNC_PROLOGUE() __builtin_assume(((size_t)base & 0x1F) == 0)
+#endif
 
 #ifndef PPC_LOAD_U8
 #define PPC_LOAD_U8(x) *(volatile uint8_t*)(base + (x))
