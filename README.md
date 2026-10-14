@@ -1,3 +1,5 @@
+> **PS3 fork:** this branch adds support for PS3 (Cell PPU) executables. It is unofficial and not affiliated with the XenonRecomp authors. See [README-PS3.md](README-PS3.md).
+
 # XenonRecomp
 
 XenonRecomp is a tool that converts Xbox 360 executables into C++ code, which can then be recompiled for any platform.
