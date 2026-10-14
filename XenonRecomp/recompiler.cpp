@@ -2334,6 +2334,156 @@ bool Recompiler::Recompile(
         println("\t{}.u64 = {}.u64 ^ {};", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2] << 16);
         break;
 
+
+    // ===================== PS3 (Cell PPU): additional instructions =====================
+    case PPC_INST_VSPLTISH:
+        println("\tsimde_mm_store_si128((simde__m128i*){}.u16, simde_mm_set1_epi16(short({})));", v(insn.operands[0]), int32_t(insn.operands[1]) << 27 >> 27);
+        break;
+
+    case PPC_INST_VANDC:
+        println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_andnot_si128(simde_mm_load_si128((simde__m128i*){}.u8), simde_mm_load_si128((simde__m128i*){}.u8)));", v(insn.operands[0]), v(insn.operands[2]), v(insn.operands[1]));
+        break;
+
+    case PPC_INST_VMINSW:
+        println("\tsimde_mm_store_si128((simde__m128i*){}.s32, simde_mm_min_epi32(simde_mm_load_si128((simde__m128i*){}.s32), simde_mm_load_si128((simde__m128i*){}.s32)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        break;
+
+    case PPC_INST_VCMPGTSW:
+        println("\tsimde_mm_store_si128((simde__m128i*){}.s32, simde_mm_cmpgt_epi32(simde_mm_load_si128((simde__m128i*){}.s32), simde_mm_load_si128((simde__m128i*){}.s32)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        break;
+
+    case PPC_INST_VRLW:
+        for (size_t i = 0; i < 4; i++)
+            println("\t{}.u32[{}] = __builtin_rotateleft32({}.u32[{}], {}.u8[{}] & 0x1F);", v(insn.operands[0]), i, v(insn.operands[1]), i, v(insn.operands[2]), i * 4);
+        break;
+
+    // Vectors are stored fully byte-reversed, so as a little-endian 128-bit integer they equal the game's big-endian value
+    case PPC_INST_VSL:
+        println("\t{{ unsigned __int128 x; memcpy(&x, {}.u8, 16); x <<= ({}.u8[0] & 7); memcpy({}.u8, &x, 16); }}", v(insn.operands[1]), v(insn.operands[2]), v(insn.operands[0]));
+        break;
+
+    case PPC_INST_VSLO:
+        println("\t{{ unsigned __int128 x; memcpy(&x, {}.u8, 16); uint32_t s = ({}.u8[0] >> 3) & 0xF; x = s ? (x << (8 * s)) : x; memcpy({}.u8, &x, 16); }}", v(insn.operands[1]), v(insn.operands[2]), v(insn.operands[0]));
+        break;
+
+    case PPC_INST_LVEBX:
+        print("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_shuffle_epi8(simde_mm_load_si128((simde__m128i*)(base + ((", v(insn.operands[0]));
+        if (insn.operands[1] != 0)
+            print("{}.u32 + ", r(insn.operands[1]));
+        println("{}.u32) & ~0xF))), simde_mm_load_si128((simde__m128i*)VectorMaskL)));", r(insn.operands[2]));
+        break;
+
+    case PPC_INST_LFSU:
+        printSetFlushMode(false);
+        println("\t{} = {} + {}.u32;", ea(), int32_t(insn.operands[1]), r(insn.operands[2]));
+        println("\t{}.u32 = PPC_LOAD_U32({});", temp(), ea());
+        println("\t{}.f64 = double({}.f32);", f(insn.operands[0]), temp());
+        println("\t{}.u32 = {};", r(insn.operands[2]), ea());
+        break;
+
+    case PPC_INST_STFSU:
+        printSetFlushMode(false);
+        println("\t{} = {} + {}.u32;", ea(), int32_t(insn.operands[1]), r(insn.operands[2]));
+        println("\t{}.f32 = float({}.f64);", temp(), f(insn.operands[0]));
+        println("\tPPC_STORE_U32({}, {}.u32);", ea(), temp());
+        println("\t{}.u32 = {};", r(insn.operands[2]), ea());
+        break;
+
+    case PPC_INST_LHZU:
+        println("\t{} = {} + {}.u32;", ea(), int32_t(insn.operands[1]), r(insn.operands[2]));
+        println("\t{}.u64 = PPC_LOAD_U16({});", r(insn.operands[0]), ea());
+        println("\t{}.u32 = {};", r(insn.operands[2]), ea());
+        break;
+
+    case PPC_INST_STHU:
+        println("\t{} = {} + {}.u32;", ea(), int32_t(insn.operands[1]), r(insn.operands[2]));
+        println("\tPPC_STORE_U16({}, {}.u16);", ea(), r(insn.operands[0]));
+        println("\t{}.u32 = {};", r(insn.operands[2]), ea());
+        break;
+
+    case PPC_INST_STDUX:
+        println("\t{} = {}.u32 + {}.u32;", ea(), r(insn.operands[1]), r(insn.operands[2]));
+        println("\tPPC_STORE_U64({}, {}.u64);", ea(), r(insn.operands[0]));
+        println("\t{}.u32 = {};", r(insn.operands[1]), ea());
+        break;
+
+    case PPC_INST_RLDIC:
+        println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}) & 0x{:X};", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2], ComputeMask(insn.operands[3], 63 - insn.operands[2]));
+        break;
+
+    case PPC_INST_MULHD:
+        println("\t{}.s64 = int64_t((__int128({}.s64) * __int128({}.s64)) >> 64);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        break;
+
+    case PPC_INST_MULHDU:
+        println("\t{}.u64 = uint64_t((((unsigned __int128){}.u64) * ((unsigned __int128){}.u64)) >> 64);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        break;
+
+    case PPC_INST_FRSQRTE:
+        printSetFlushMode(false);
+        println("\t{}.f64 = 1.0 / sqrt({}.f64);", f(insn.operands[0]), f(insn.operands[1]));
+        break;
+
+    case PPC_INST_MFCTR:
+        println("\t{}.u64 = {}.u64;", r(insn.operands[0]), ctr());
+        break;
+
+    case PPC_INST_MTOCRF:
+    {
+        // FXM selects the CR fields to write (one bit per field, field 0 = 0x80)
+        const uint32_t fxm = insn.operands[0];
+        for (uint32_t field = 0; field < 8; field++)
+        {
+            if (!(fxm & (0x80u >> field))) continue;
+            const uint32_t sh = 28 - field * 4;
+            println("\t{}.lt = ({}.u32 >> {}) & 1;", cr(field), r(insn.operands[1]), sh + 3);
+            println("\t{}.gt = ({}.u32 >> {}) & 1;", cr(field), r(insn.operands[1]), sh + 2);
+            println("\t{}.eq = ({}.u32 >> {}) & 1;", cr(field), r(insn.operands[1]), sh + 1);
+            println("\t{}.so = ({}.u32 >> {}) & 1;", cr(field), r(insn.operands[1]), sh);
+        }
+        break;
+    }
+
+    case PPC_INST_MCRF:
+        println("\t{} = {};", cr(insn.operands[0]), cr(insn.operands[1]));
+        break;
+
+    case PPC_INST_CROR:
+    {
+        constexpr std::string_view fields[] = { "lt", "gt", "eq", "so" };
+        const uint32_t bt = insn.operands[0], ba = insn.operands[1], bb = insn.operands[2];
+        println("\t{}.{} = {}.{} | {}.{};", cr(bt / 4), fields[bt % 4], cr(ba / 4), fields[ba % 4], cr(bb / 4), fields[bb % 4]);
+        break;
+    }
+
+    case PPC_INST_ISYNC:
+        // no op
+        break;
+
+    // Traps (compiler asserts): ignored for now
+    case PPC_INST_TWNEI:
+    case PPC_INST_TRAP:
+    case PPC_INST_TDI:
+    case PPC_INST_TDLEI:
+    case PPC_INST_TDEQI:
+    case PPC_INST_TDGEI:
+    case PPC_INST_TDNEI:
+    case PPC_INST_TDGTI:
+    case PPC_INST_TDLTI:
+    case PPC_INST_TWGTI:
+    case PPC_INST_TWEQI:
+    case PPC_INST_TWLLTI:
+    case PPC_INST_TWLEI:
+    case PPC_INST_TWGEI:
+    case PPC_INST_TWLTI:
+        // no op
+        break;
+
+    // PS3 kernel (LV2) call: r11 = syscall number. Implemented by the runtime.
+    case PPC_INST_SC:
+        println("\tPPC_CALL_SYSCALL(ctx, base);");
+        break;
+
     default:
         return false;
     }
