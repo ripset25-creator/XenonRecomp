@@ -870,11 +870,13 @@ bool Recompiler::Recompile(
         // no op
         break;
 
+    // PS3: the Cell cache line is 128 bytes, so dcbz clears 128 bytes (32 on Xbox 360).
+    // Games rely on it to clear memory in 128-byte blocks (e.g. SPU job lists).
     case PPC_INST_DCBZ:
         print("\tmemset(base + ((");
         if (insn.operands[0] != 0)
             print("{}.u32 + ", r(insn.operands[0]));
-        println("{}.u32) & ~31), 0, 32);", r(insn.operands[1]));
+        println("{}.u32) & ~127), 0, 128);", r(insn.operands[1]));
         break;
 
     case PPC_INST_DCBZL:
@@ -884,24 +886,26 @@ bool Recompiler::Recompile(
         println("{}.u32) & ~127), 0, 128);", r(insn.operands[1]));
         break;
 
+    // PS3: dividing by zero does not trap on PowerPC (the result is undefined), but it faults on x86.
+    // Return 0, which is what the Cell does in practice.
     case PPC_INST_DIVD:
-        println("\t{}.s64 = {}.s64 / {}.s64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        println("\t{}.s64 = ({}.s64 == 0 || ({}.s64 == INT64_MIN && {}.s64 == -1)) ? 0 : {}.s64 / {}.s64;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         break;
 
     case PPC_INST_DIVDU:
-        println("\t{}.u64 = {}.u64 / {}.u64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        println("\t{}.u64 = {}.u64 == 0 ? 0 : {}.u64 / {}.u64;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
             println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_DIVW:
-        println("\t{}.s32 = {}.s32 / {}.s32;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        println("\t{}.s32 = ({}.s32 == 0 || ({}.s32 == INT32_MIN && {}.s32 == -1)) ? 0 : {}.s32 / {}.s32;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
             println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_DIVWU:
-        println("\t{}.u32 = {}.u32 / {}.u32;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        println("\t{}.u32 = {}.u32 == 0 ? 0 : {}.u32 / {}.u32;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
             println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
@@ -1313,12 +1317,17 @@ bool Recompiler::Recompile(
         break;
 
     case PPC_INST_MFOCRF:
-        // TODO: don't hardcode to cr6
-        println("\t{}.u64 = ({}.lt << 7) | ({}.gt << 6) | ({}.eq << 5) | ({}.so << 4);", r(insn.operands[0]), cr(6), cr(6), cr(6), cr(6));
+        // PS3/GCC uses it with any field (not only cr6 as on Xbox 360). The architecture leaves the
+        // other fields' bits undefined, so return the whole CR with every field in place (like mfcr).
+        for (size_t i = 0; i < 32; i++)
+        {
+            constexpr std::string_view fields[] = { "lt", "gt", "eq", "so" };
+            println("\t{}.u64 {}= {}.{} ? 0x{:X} : 0;", r(insn.operands[0]), i == 0 ? "" : "|", cr(i / 4), fields[i % 4], 1u << (31 - i));
+        }
         break;
 
     case PPC_INST_MFTB:
-        println("\t{}.u64 = __rdtsc();", r(insn.operands[0]));
+        println("\t{}.u64 = PPC_QUERY_TIMEBASE();", r(insn.operands[0]));
         break;
 
     case PPC_INST_MR:
@@ -1427,10 +1436,14 @@ bool Recompiler::Recompile(
 
     case PPC_INST_RLDICL:
         println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}) & 0x{:X};", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2], ComputeMask(insn.operands[3], 63));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_RLDICR:
         println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}) & 0x{:X};", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2], ComputeMask(0, insn.operands[3]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_RLDIMI:

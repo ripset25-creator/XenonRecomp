@@ -700,4 +700,18 @@ inline uint64_t __rdtsc()
 #   error "Missing implementation for __rdtsc()"
 #endif
 
+
+// PS3: LV2 kernel call (sc instruction, number in r11). Implemented by the port's runtime.
+#ifndef PPC_CALL_SYSCALL
+struct PPCContext;
+extern void ps3_syscall(PPCContext& ctx, uint8_t* base);
+#define PPC_CALL_SYSCALL(ctx, base) ps3_syscall(ctx, base)
+#endif
+
+// PS3: time base (mftb). It runs at 79.8 MHz on PS3; the runtime emulates it with the host clock.
+#ifndef PPC_QUERY_TIMEBASE
+extern uint64_t ps3_timebase();
+#define PPC_QUERY_TIMEBASE() ps3_timebase()
+#endif
+
 #endif
