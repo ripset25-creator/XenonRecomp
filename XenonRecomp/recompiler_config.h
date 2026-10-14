@@ -3,6 +3,7 @@
 struct RecompilerSwitchTable
 {
     uint32_t r;
+    uint32_t shift = 0; // PS3/GCC: the register holds index*4 -> shift = 2
     std::vector<uint32_t> labels;
 };
 

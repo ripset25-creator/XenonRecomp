@@ -639,13 +639,23 @@ bool Recompiler::Recompile(
     case PPC_INST_BCTR:
         if (switchTable != config.switchTables.end())
         {
-            println("\tswitch ({}.u64) {{", r(switchTable->second.r));
+            if (switchTable->second.shift)
+                println("\tswitch ({}.u32 >> {}) {{", r(switchTable->second.r), switchTable->second.shift);
+            else
+                println("\tswitch ({}.u64) {{", r(switchTable->second.r));
 
             for (size_t i = 0; i < switchTable->second.labels.size(); i++)
             {
                 println("\tcase {}:", i);
                 auto label = switchTable->second.labels[i];
-                if (label < fn.base || label >= fn.base + fn.size)
+                if ((label < fn.base || label >= fn.base + fn.size) && image.symbols.find(label) != image.symbols.end())
+                {
+                    // PS3/GCC: a switch case that jumps into another function (tail call)
+                    print("\t\t");
+                    printFunctionCall(label);
+                    println("\t\treturn;");
+                }
+                else if (label < fn.base || label >= fn.base + fn.size)
                 {
                     println("\t\t// ERROR: 0x{:X}", label);
                     fmt::println("ERROR: Switch case at {:X} is trying to jump outside function: {:X}", base, label);
@@ -658,7 +668,8 @@ bool Recompiler::Recompile(
             }
 
             println("\tdefault:");
-            println("\t\t__builtin_unreachable();");
+            println("\t\tPPC_CALL_INDIRECT_FUNC({}.u32);", ctr());
+            println("\t\treturn;");
             println("\t}}");
 
             switchTable = config.switchTables.end();
