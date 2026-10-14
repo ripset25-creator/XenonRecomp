@@ -23,6 +23,7 @@ project ("XenonRecomp-ALL")
 add_subdirectory(${XENONANALYSE_ROOT})
 add_subdirectory(${XENONRECOMP_ROOT})
 add_subdirectory(${XENONUTILS_ROOT})
+add_subdirectory(tools/ps3)
 
 # Only tests if this is the top level project
 if (${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
