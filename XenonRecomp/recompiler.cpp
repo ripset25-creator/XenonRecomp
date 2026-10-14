@@ -450,6 +450,23 @@ bool Recompiler::Recompile(
             }
         };
 
+    // PS3: a conditional CTR branch can target code outside the function (overlapping copies)
+    auto printCtrBranch = [&](const std::string& cond, uint32_t target)
+        {
+            if (target < fn.base || target >= fn.base + fn.size)
+            {
+                println("\tif ({}) {{", cond);
+                print("\t");
+                printFunctionCall(target);
+                println("\t\treturn;");
+                println("\t}}");
+            }
+            else
+            {
+                println("\tif ({}) goto loc_{:X};", cond, target);
+            }
+        };
+
     auto printSetFlushMode = [&](bool enable)
         {
             auto newState = enable ? CSRState::VMX : CSRState::FPU;
@@ -690,7 +707,7 @@ bool Recompiler::Recompile(
 
     case PPC_INST_BDZ:
         println("\t--{}.u64;", ctr());
-        println("\tif ({}.u32 == 0) goto loc_{:X};", ctr(), insn.operands[0]);
+        printCtrBranch(fmt::format("{}.u32 == 0", ctr()), insn.operands[0]);
         break;
 
     case PPC_INST_BDZLR:
@@ -700,13 +717,13 @@ bool Recompiler::Recompile(
 
     case PPC_INST_BDNZ:
         println("\t--{}.u64;", ctr());
-        println("\tif ({}.u32 != 0) goto loc_{:X};", ctr(), insn.operands[0]);
+        printCtrBranch(fmt::format("{}.u32 != 0", ctr()), insn.operands[0]);
         break;
 
     case PPC_INST_BDNZF:
         // NOTE: assuming eq here as a shortcut because all the instructions in the game do that
         println("\t--{}.u64;", ctr());
-        println("\tif ({}.u32 != 0 && !{}.eq) goto loc_{:X};", ctr(), cr(insn.operands[0] / 4), insn.operands[1]);
+        printCtrBranch(fmt::format("{}.u32 != 0 && !{}.eq", ctr(), cr(insn.operands[0] / 4)), insn.operands[1]);
         break;
 
     case PPC_INST_BEQ:
