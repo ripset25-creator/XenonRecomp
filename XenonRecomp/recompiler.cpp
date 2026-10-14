@@ -174,9 +174,31 @@ void Recompiler::Analyse()
         image.symbols.emplace(fmt::format("sub_{:X}", address), address, size, Symbol_Function);
     }
 
-    auto& pdata = *image.Find(".pdata");
-    size_t count = pdata.size / sizeof(IMAGE_CE_RUNTIME_FUNCTION);
-    auto* pf = (IMAGE_CE_RUNTIME_FUNCTION*)pdata.data;
+    // PS3: there is no .pdata. Functions are seeded from the .opd descriptors (code, TOC);
+    // Function::Analyze computes their size.
+    if (const auto* opd = image.Find(".opd"))
+    {
+        const Section* code = nullptr;
+        for (const auto& section : image.sections)
+            if ((section.flags & SectionFlags_Code) && (!code || section.size > code->size))
+                code = &section;
+
+        for (size_t off = 0; off + 8 <= opd->size; off += 8)
+        {
+            uint32_t address = ByteSwap(*(uint32_t*)(opd->data + off));
+            if (!code || address < code->base || address >= code->base + code->size || (address & 3))
+                continue;
+            if (image.symbols.find(address) != image.symbols.end())
+                continue;
+            auto data = code->data + address - code->base;
+            auto& fn = functions.emplace_back(Function::Analyze(data, code->base + code->size - address, address));
+            image.symbols.emplace(fmt::format("sub_{:X}", fn.base), fn.base, fn.size, Symbol_Function);
+        }
+    }
+
+    const Section* pdataSection = image.Find(".pdata");
+    size_t count = pdataSection ? pdataSection->size / sizeof(IMAGE_CE_RUNTIME_FUNCTION) : 0;
+    auto* pf = pdataSection ? (IMAGE_CE_RUNTIME_FUNCTION*)pdataSection->data : nullptr;
     for (size_t i = 0; i < count; i++)
     {
         auto fn = pf[i];
@@ -242,7 +264,15 @@ void Recompiler::Analyse()
             }
             else
             {
-                auto& fn = functions.emplace_back(Function::Analyze(data, dataEnd - data, base));
+                auto fn = Function::Analyze(data, dataEnd - data, base);
+                if (fn.size == 0)
+                {
+                    // PS3: data or padding inside .text (jump tables, zeros): skip 4 bytes
+                    base += 4;
+                    data += 4;
+                    continue;
+                }
+                functions.push_back(fn);
                 image.symbols.emplace(fmt::format("sub_{:X}", fn.base), fn.base, fn.size, Symbol_Function);
 
                 base += fn.size;
@@ -2438,10 +2468,23 @@ bool Recompiler::Recompile(const Function& fn)
         ++data;
     }
 
-#if 0
+    // PS3: if the last instruction is not an unconditional branch (b, blr, bctr), the original
+    // code falls through into the next instruction, which here belongs to another function
+    // (function bounds are inferred and sometimes split one function in two). Call it to
+    // continue; otherwise the function would lose its tail (e.g. never restore r1).
     if (insn.opcode == nullptr || (insn.opcode->id != PPC_INST_B && insn.opcode->id != PPC_INST_BCTR && insn.opcode->id != PPC_INST_BLR))
-        fmt::println("Function at {:X} ends prematurely with instruction {} at {:X}", fn.base, insn.opcode != nullptr ? insn.opcode->name : "INVALID", base - 4);
-#endif
+    {
+        auto sig = image.symbols.find(end);
+        if (sig != image.symbols.end() && sig->address == end && sig->type == Symbol_Function)
+        {
+            println("	// falls through into the next function");
+            println("	{}(ctx, base);", sig->name);
+        }
+        else
+        {
+            fmt::println("Function at {:X} ends prematurely with instruction {} at {:X}", fn.base, insn.opcode != nullptr ? insn.opcode->name : "INVALID", base - 4);
+        }
+    }
 
     println("}}\n");
 
