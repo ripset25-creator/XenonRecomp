@@ -575,15 +575,15 @@ bool Recompiler::Recompile(
     case PPC_INST_ADD:
         println("\t{}.u64 = {}.u64 + {}.u64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ADDE:
-        println("\t{}.u8 = ({}.u32 + {}.u32 < {}.u32) | ({}.u32 + {}.u32 + {}.ca < {}.ca);", temp(), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[1]), r(insn.operands[2]), xer(), xer());
+        println("\t{}.u8 = ({}.u64 + {}.u64 < {}.u64) | ({}.u64 + {}.u64 + {}.ca < {}.ca);", temp(), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[1]), r(insn.operands[2]), xer(), xer());
         println("\t{}.u64 = {}.u64 + {}.u64 + {}.ca;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]), xer());
         println("\t{}.ca = {}.u8;", xer(), temp());
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ADDI:
@@ -594,10 +594,10 @@ bool Recompiler::Recompile(
         break;
 
     case PPC_INST_ADDIC:
-        println("\t{}.ca = {}.u32 > {};", xer(), r(insn.operands[1]), ~insn.operands[2]);
+        println("\t{}.ca = {}.u64 > 0x{:X}ull;", xer(), r(insn.operands[1]), ~uint64_t(int64_t(int32_t(insn.operands[2]))));
         println("\t{}.s64 = {}.s64 + {};", r(insn.operands[0]), r(insn.operands[1]), int32_t(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ADDIS:
@@ -609,32 +609,32 @@ bool Recompiler::Recompile(
 
     case PPC_INST_ADDZE:
         println("\t{}.s64 = {}.s64 + {}.ca;", temp(), r(insn.operands[1]), xer());
-        println("\t{}.ca = {}.u32 < {}.u32;", xer(), temp(), r(insn.operands[1]));
+        println("\t{}.ca = {}.u64 < {}.u64;", xer(), temp(), r(insn.operands[1]));
         println("\t{}.s64 = {}.s64;", r(insn.operands[0]), temp());
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_AND:
         println("\t{}.u64 = {}.u64 & {}.u64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ANDC:
         println("\t{}.u64 = {}.u64 & ~{}.u64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ANDI:
         println("\t{}.u64 = {}.u64 & {};", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2]);
-        println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+        println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ANDIS:
         println("\t{}.u64 = {}.u64 & {};", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2] << 16);
-        println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+        println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ATTN:
@@ -811,7 +811,7 @@ bool Recompiler::Recompile(
     case PPC_INST_CLRLWI:
         println("\t{}.u64 = {}.u32 & 0x{:X};", r(insn.operands[0]), r(insn.operands[1]), (1ull << (32 - insn.operands[2])) - 1);
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_CMPD:
@@ -895,19 +895,19 @@ bool Recompiler::Recompile(
     case PPC_INST_DIVDU:
         println("\t{}.u64 = {}.u64 == 0 ? 0 : {}.u64 / {}.u64;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_DIVW:
         println("\t{}.s32 = ({}.s32 == 0 || ({}.s32 == INT32_MIN && {}.s32 == -1)) ? 0 : {}.s32 / {}.s32;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_DIVWU:
         println("\t{}.u32 = {}.u32 == 0 ? 0 : {}.u32 / {}.u32;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_EIEIO:
@@ -917,19 +917,19 @@ bool Recompiler::Recompile(
     case PPC_INST_EXTSB:
         println("\t{}.s64 = {}.s8;", r(insn.operands[0]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_EXTSH:
         println("\t{}.s64 = {}.s16;", r(insn.operands[0]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_EXTSW:
         println("\t{}.s64 = {}.s32;", r(insn.operands[0]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_FABS:
@@ -1333,7 +1333,7 @@ bool Recompiler::Recompile(
     case PPC_INST_MR:
         println("\t{}.u64 = {}.u64;", r(insn.operands[0]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_MTCR:
@@ -1375,7 +1375,7 @@ bool Recompiler::Recompile(
     case PPC_INST_MULHWU:
         println("\t{}.u64 = (uint64_t({}.u32) * uint64_t({}.u32)) >> 32;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_MULLD:
@@ -1389,7 +1389,7 @@ bool Recompiler::Recompile(
     case PPC_INST_MULLW:
         println("\t{}.s64 = int64_t({}.s32) * int64_t({}.s32);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_NAND:
@@ -1399,7 +1399,7 @@ bool Recompiler::Recompile(
     case PPC_INST_NEG:
         println("\t{}.s64 = -{}.s64;", r(insn.operands[0]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_NOP:
@@ -1413,13 +1413,13 @@ bool Recompiler::Recompile(
     case PPC_INST_NOT:
         println("\t{}.u64 = ~{}.u64;", r(insn.operands[0]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_OR:
         println("\t{}.u64 = {}.u64 | {}.u64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ORC:
@@ -1463,7 +1463,7 @@ bool Recompiler::Recompile(
     case PPC_INST_RLWINM:
         println("\t{}.u64 = __builtin_rotateleft64({}.u32 | ({}.u64 << 32), {}) & 0x{:X};", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[1]), insn.operands[2], ComputeMask(insn.operands[3] + 32, insn.operands[4] + 32));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ROTLDI:
@@ -1477,7 +1477,7 @@ bool Recompiler::Recompile(
     case PPC_INST_ROTLWI:
         println("\t{}.u64 = __builtin_rotateleft32({}.u32, {});", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2]);
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_SLD:
@@ -1487,13 +1487,13 @@ bool Recompiler::Recompile(
     case PPC_INST_SLW:
         println("\t{}.u64 = {}.u8 & 0x20 ? 0 : ({}.u32 << ({}.u8 & 0x3F));", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_SRAD:
         println("\t{}.u64 = {}.u64 & 0x7F;", temp(), r(insn.operands[2]));
-        println("\tif ({}.u64 > 0x3F) {}.u64 = 0x3F;", temp(), temp());
-        println("\t{}.ca = ({}.s64 < 0) & ((({}.s64 >> {}.u64) << {}.u64) != {}.s64);", xer(), r(insn.operands[1]), r(insn.operands[1]), temp(), temp(), r(insn.operands[1]));
+        println("\tif ({}.u64 > 0x3F) {{ {}.u64 = 0x3F; {}.ca = {}.s64 < 0; }}", temp(), temp(), xer(), r(insn.operands[1]));
+        println("\telse {}.ca = ({}.s64 < 0) & ((({}.s64 >> {}.u64) << {}.u64) != {}.s64);", xer(), r(insn.operands[1]), r(insn.operands[1]), temp(), temp(), r(insn.operands[1]));
         println("\t{}.s64 = {}.s64 >> {}.u64;", r(insn.operands[0]), r(insn.operands[1]), temp());
         break;
 
@@ -1512,11 +1512,11 @@ bool Recompiler::Recompile(
 
     case PPC_INST_SRAW:
         println("\t{}.u32 = {}.u32 & 0x3F;", temp(), r(insn.operands[2]));
-        println("\tif ({}.u32 > 0x1F) {}.u32 = 0x1F;", temp(), temp());
-        println("\t{}.ca = ({}.s32 < 0) & ((({}.s32 >> {}.u32) << {}.u32) != {}.s32);", xer(), r(insn.operands[1]), r(insn.operands[1]), temp(), temp(), r(insn.operands[1]));
+        println("\tif ({}.u32 > 0x1F) {{ {}.u32 = 0x1F; {}.ca = {}.s32 < 0; }}", temp(), temp(), xer(), r(insn.operands[1]));
+        println("\telse {}.ca = ({}.s32 < 0) & ((({}.s32 >> {}.u32) << {}.u32) != {}.s32);", xer(), r(insn.operands[1]), r(insn.operands[1]), temp(), temp(), r(insn.operands[1]));
         println("\t{}.s64 = {}.s32 >> {}.u32;", r(insn.operands[0]), r(insn.operands[1]), temp());
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_SRAWI:
@@ -1531,7 +1531,7 @@ bool Recompiler::Recompile(
             println("\t{}.s64 = {}.s32;", r(insn.operands[0]), r(insn.operands[1]));
         }
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_SRD:
@@ -1541,7 +1541,7 @@ bool Recompiler::Recompile(
     case PPC_INST_SRW:
         println("\t{}.u64 = {}.u8 & 0x20 ? 0 : ({}.u32 >> ({}.u8 & 0x3F));", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_STB:
@@ -1758,31 +1758,86 @@ bool Recompiler::Recompile(
     case PPC_INST_SUBF:
         println("\t{}.s64 = {}.s64 - {}.s64;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_SUBFC:
-        println("\t{}.ca = {}.u32 >= {}.u32;", xer(), r(insn.operands[2]), r(insn.operands[1]));
+        println("\t{}.ca = {}.u64 >= {}.u64;", xer(), r(insn.operands[2]), r(insn.operands[1]));
         println("\t{}.s64 = {}.s64 - {}.s64;", r(insn.operands[0]), r(insn.operands[2]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_SUBFE:
-        println("\t{}.u8 = (~{}.u32 + {}.u32 < ~{}.u32) | (~{}.u32 + {}.u32 + {}.ca < {}.ca);", temp(), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[1]), r(insn.operands[2]), xer(), xer());
+        println("\t{}.u8 = (~{}.u64 + {}.u64 < ~{}.u64) | (~{}.u64 + {}.u64 + {}.ca < {}.ca);", temp(), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]), r(insn.operands[1]), r(insn.operands[2]), xer(), xer());
         println("\t{}.u64 = ~{}.u64 + {}.u64 + {}.ca;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]), xer());
         println("\t{}.ca = {}.u8;", xer(), temp());
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_SUBFIC:
-        println("\t{}.ca = {}.u32 <= {};", xer(), r(insn.operands[1]), insn.operands[2]);
+        println("\t{}.ca = {}.u64 <= 0x{:X}ull;", xer(), r(insn.operands[1]), uint64_t(int64_t(int32_t(insn.operands[2]))));
         println("\t{}.s64 = {} - {}.s64;", r(insn.operands[0]), int32_t(insn.operands[2]), r(insn.operands[1]));
         break;
 
     case PPC_INST_SYNC:
+    case PPC_INST_PTESYNC:
         // no op
+        break;
+
+    // addme/subfme/subfze, lfdu, ptesync, vcmpgtsh and vcmpbfp were added, and the 64-bit carry, cr0,
+    // sraw/srad and vmaxfp/vminfp fixes made, after running ps3recomp's PPU conformance cases
+    // (https://github.com/sp00nznet/ps3recomp, MIT) through tools/ps3/conformance.
+    case PPC_INST_ADDME:
+        // rD = rA + CA - 1; carry unless rA = 0 and CA = 0
+        println("\t{}.u64 = {}.u64 + {}.ca - 1;", temp(), r(insn.operands[1]), xer());
+        println("\t{}.ca = ({}.u64 | {}.ca) != 0;", xer(), r(insn.operands[1]), xer());
+        println("\t{}.u64 = {}.u64;", r(insn.operands[0]), temp());
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
+        break;
+
+    case PPC_INST_SUBFME:
+        // rD = ~rA + CA - 1; carry unless rA = -1 and CA = 0
+        println("\t{}.u64 = ~{}.u64 + {}.ca - 1;", temp(), r(insn.operands[1]), xer());
+        println("\t{}.ca = (~{}.u64 | {}.ca) != 0;", xer(), r(insn.operands[1]), xer());
+        println("\t{}.u64 = {}.u64;", r(insn.operands[0]), temp());
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
+        break;
+
+    case PPC_INST_SUBFZE:
+        // rD = ~rA + CA; carry only if rA = 0 and CA = 1
+        println("\t{}.u64 = ~{}.u64 + {}.ca;", temp(), r(insn.operands[1]), xer());
+        println("\t{}.ca = ({}.u64 == 0) & {}.ca;", xer(), r(insn.operands[1]), xer());
+        println("\t{}.u64 = {}.u64;", r(insn.operands[0]), temp());
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
+        break;
+
+    case PPC_INST_LFDU:
+        printSetFlushMode(false);
+        println("\t{} = {} + {}.u32;", ea(), int32_t(insn.operands[1]), r(insn.operands[2]));
+        println("\t{}.u64 = PPC_LOAD_U64({});", f(insn.operands[0]), ea());
+        println("\t{}.u32 = {};", r(insn.operands[2]), ea());
+        break;
+
+    case PPC_INST_VCMPGTSH:
+        println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_cmpgt_epi16(simde_mm_load_si128((simde__m128i*){}.s16), simde_mm_load_si128((simde__m128i*){}.s16)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.setFromMask(simde_mm_load_ps({}.f32), 0xF);", cr(6), v(insn.operands[0]));
+        break;
+
+    case PPC_INST_VCMPBFP:
+        // Bounds compare: bit 0 = !(a <= b), bit 1 = !(a >= -b); a NaN sets both
+        printSetFlushMode(true);
+        for (size_t i = 0; i < 4; i++)
+            println("\t{}.u32[{}] = ({}.f32[{}] <= {}.f32[{}] ? 0 : 0x80000000u) | ({}.f32[{}] >= -{}.f32[{}] ? 0 : 0x40000000u);",
+                vTemp(), i, v(insn.operands[1]), i, v(insn.operands[2]), i, v(insn.operands[1]), i, v(insn.operands[2]), i);
+        println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_load_si128((simde__m128i*){}.u8));", v(insn.operands[0]), vTemp());
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.lt = 0; {}.gt = 0; {}.eq = simde_mm_testz_si128(simde_mm_load_si128((simde__m128i*){}.u8), simde_mm_set1_epi32(-1)); {}.so = 0;", cr(6), cr(6), cr(6), v(insn.operands[0]), cr(6));
         break;
 
     case PPC_INST_TDLGEI:
@@ -1900,7 +1955,6 @@ bool Recompiler::Recompile(
         break;
     }
 
-    case PPC_INST_VCMPBFP:
     case PPC_INST_VCMPBFP128:
         println("\t__builtin_debugtrap();");
         break;
@@ -1976,7 +2030,13 @@ bool Recompiler::Recompile(
     case PPC_INST_VMAXFP:
     case PPC_INST_VMAXFP128:
         printSetFlushMode(true);
-        println("\tsimde_mm_store_ps({}.f32, simde_mm_max_ps(simde_mm_load_ps({}.f32), simde_mm_load_ps({}.f32)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        {
+            // Like the VMX unit (and RPCS3/ps3recomp): a NaN input gives a quiet NaN, and +0/-0 are ordered
+            auto a = fmt::format("simde_mm_load_ps({}.f32)", v(insn.operands[1])), b = fmt::format("simde_mm_load_ps({}.f32)", v(insn.operands[2]));
+            println("\t{{ simde__m128 r = simde_mm_blendv_ps(simde_mm_max_ps({}, {}), simde_mm_and_ps({}, {}), simde_mm_cmpeq_ps({}, {}));", a, b, a, b, a, b);
+            println("\tsimde__m128 n = simde_mm_or_ps(simde_mm_blendv_ps({}, {}, simde_mm_cmpunord_ps({}, {})), simde_mm_castsi128_ps(simde_mm_set1_epi32(0x00400000)));", b, a, a, a);
+            println("\tsimde_mm_store_ps({}.f32, simde_mm_blendv_ps(r, n, simde_mm_cmpunord_ps({}, {}))); }}", v(insn.operands[0]), a, b);
+        }
         break;
 
     case PPC_INST_VMAXSW:
@@ -1986,7 +2046,13 @@ bool Recompiler::Recompile(
     case PPC_INST_VMINFP:
     case PPC_INST_VMINFP128:
         printSetFlushMode(true);
-        println("\tsimde_mm_store_ps({}.f32, simde_mm_min_ps(simde_mm_load_ps({}.f32), simde_mm_load_ps({}.f32)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        {
+            // Like the VMX unit (and RPCS3/ps3recomp): a NaN input gives a quiet NaN, and +0/-0 are ordered
+            auto a = fmt::format("simde_mm_load_ps({}.f32)", v(insn.operands[1])), b = fmt::format("simde_mm_load_ps({}.f32)", v(insn.operands[2]));
+            println("\t{{ simde__m128 r = simde_mm_blendv_ps(simde_mm_min_ps({}, {}), simde_mm_or_ps({}, {}), simde_mm_cmpeq_ps({}, {}));", a, b, a, b, a, b);
+            println("\tsimde__m128 n = simde_mm_or_ps(simde_mm_blendv_ps({}, {}, simde_mm_cmpunord_ps({}, {})), simde_mm_castsi128_ps(simde_mm_set1_epi32(0x00400000)));", b, a, a, a);
+            println("\tsimde_mm_store_ps({}.f32, simde_mm_blendv_ps(r, n, simde_mm_cmpunord_ps({}, {}))); }}", v(insn.operands[0]), a, b);
+        }
         break;
 
     case PPC_INST_VMRGHB:
@@ -2323,7 +2389,7 @@ bool Recompiler::Recompile(
     case PPC_INST_XOR:
         println("\t{}.u64 = {}.u64 ^ {}.u64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_XORI:
@@ -2481,10 +2547,10 @@ bool Recompiler::Recompile(
         break;
 
     case PPC_INST_ADDC:
-        println("\t{}.ca = {}.u32 + {}.u32 < {}.u32;", xer(), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]));
+        println("\t{}.ca = {}.u64 + {}.u64 < {}.u64;", xer(), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]));
         println("\t{}.u64 = {}.u64 + {}.u64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     // bcctrl with BO = 1z1zz is an unconditional indirect call (seen as BO = 20, BI = 30)
@@ -2510,7 +2576,7 @@ bool Recompiler::Recompile(
     case PPC_INST_EQV:
         println("\t{}.u64 = ~({}.u64 ^ {}.u64);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_STFDU:
