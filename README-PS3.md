@@ -13,7 +13,7 @@ The `ps3` branch is upstream commit `ddd128b` plus a short series of commits, on
 | Jump tables | Optional `shift` per switch table (GCC keeps index × 4); cases that leave the function become tail calls; indirect call in the default case |
 | CTR branches | `bdz`/`bdnz`/`bdnzf` may target code outside the function |
 | Cell semantics | 128-byte `dcbz`; division by zero returns 0; `mfocrf` with any CR field; `rldicl.`/`rldicr.` update cr0 |
-| New instructions | `vspltish`, `vandc`, `vminsw`, `vcmpgtsw`, `vrlw`, `vsl`, `vslo`, `lvebx`, `lfsu`, `stfsu`, `lhzu`, `sthu`, `stdux`, `rldic`, `mulhd`, `mulhdu`, `frsqrte`, `mfctr`, `mtocrf`, `mcrf`, `cror`, `isync`, traps (ignored) and `sc` |
+| New instructions | `vspltish`, `vandc`, `vminsw`, `vcmpgtsw`, `vrlw`, `vsl`, `vslo`, `lvebx`, `lfsu`, `stfsu`, `lhzu`, `sthu`, `stdux`, `rldic`, `mulhd`, `mulhdu`, `frsqrte`, `mfctr`, `mtocrf`, `mcrf`, `cror`, `isync`, traps (ignored) and `sc`; for PlayStation All-Stars Battle Royale also `addc`, unconditional `bcctrl`, `rldcl`, `rotld`, `eqv`, `stfdu`, `fnmadd`, `crorc`, `crnor`, `crnand`, `crandc`, `tw` (ignored) and `mtvrsave`/`mfvrsave` |
 | Runtime hooks | `sc` calls `PPC_CALL_SYSCALL` (default `ps3_syscall(ctx, base)`, syscall number in r11); `mftb` calls `PPC_QUERY_TIMEBASE` (default `ps3_timebase()`, 79.8 MHz on real hardware) |
 | Debugging | Build the generated code with `-DPPC_CHECK_R1` to get `ppc_check_r1_warning()` calls when a function returns with a different r1 |
 

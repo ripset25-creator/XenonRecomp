@@ -2461,6 +2461,7 @@ bool Recompiler::Recompile(
         break;
 
     // Traps (compiler asserts): ignored for now
+    case PPC_INST_TW:
     case PPC_INST_TWNEI:
     case PPC_INST_TRAP:
     case PPC_INST_TDI:
@@ -2478,6 +2479,77 @@ bool Recompiler::Recompile(
     case PPC_INST_TWLTI:
         // no op
         break;
+
+    case PPC_INST_ADDC:
+        println("\t{}.ca = {}.u32 + {}.u32 < {}.u32;", xer(), r(insn.operands[1]), r(insn.operands[2]), r(insn.operands[1]));
+        println("\t{}.u64 = {}.u64 + {}.u64;", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+        break;
+
+    // bcctrl with BO = 1z1zz is an unconditional indirect call (seen as BO = 20, BI = 30)
+    case PPC_INST_BCCTRL:
+        if ((insn.operands[0] & 0x14) != 0x14)
+            return false;
+        if (!config.skipLr)
+            println("\tctx.lr = 0x{:X};", base + 4);
+        println("\tPPC_CALL_INDIRECT_FUNC({}.u32);", ctr());
+        csrState = CSRState::Unknown; // the call could change it
+        break;
+
+    case PPC_INST_RLDCL:
+        println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}.u8 & 0x3F) & 0x{:X};", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]), ComputeMask(insn.operands[3], 63));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
+        break;
+
+    case PPC_INST_ROTLD:
+        println("\t{}.u64 = __builtin_rotateleft64({}.u64, {}.u8 & 0x3F);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        break;
+
+    case PPC_INST_EQV:
+        println("\t{}.u64 = ~({}.u64 ^ {}.u64);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int32_t>({}.s32, 0, {});", cr(0), r(insn.operands[0]), xer());
+        break;
+
+    case PPC_INST_STFDU:
+        printSetFlushMode(false);
+        println("\t{} = {} + {}.u32;", ea(), int32_t(insn.operands[1]), r(insn.operands[2]));
+        println("\tPPC_STORE_U64({}, {}.u64);", ea(), f(insn.operands[0]));
+        println("\t{}.u32 = {};", r(insn.operands[2]), ea());
+        break;
+
+    case PPC_INST_FNMADD:
+        printSetFlushMode(false);
+        println("\t{}.f64 = -({}.f64 * {}.f64 + {}.f64);", f(insn.operands[0]), f(insn.operands[1]), f(insn.operands[2]), f(insn.operands[3]));
+        break;
+
+    // VRSAVE only tells the OS which vector registers are live: nothing to do
+    case PPC_INST_MTVRSAVE:
+        break;
+
+    case PPC_INST_MFVRSAVE:
+        println("\t{}.u64 = 0xFFFFFFFF;", r(insn.operands[0]));
+        break;
+
+    case PPC_INST_CRORC:
+    case PPC_INST_CRNOR:
+    case PPC_INST_CRNAND:
+    case PPC_INST_CRANDC:
+    {
+        constexpr std::string_view fields[] = { "lt", "gt", "eq", "so" };
+        const uint32_t bt = insn.operands[0], ba = insn.operands[1], bb = insn.operands[2];
+        const std::string a = fmt::format("{}.{}", cr(ba / 4), fields[ba % 4]);
+        const std::string b = fmt::format("{}.{}", cr(bb / 4), fields[bb % 4]);
+        std::string value;
+        if (id == PPC_INST_CRORC) value = fmt::format("{} | !{}", a, b);
+        else if (id == PPC_INST_CRNOR) value = fmt::format("!({} | {})", a, b);
+        else if (id == PPC_INST_CRNAND) value = fmt::format("!({} & {})", a, b);
+        else value = fmt::format("{} & !{}", a, b);
+        println("\t{}.{} = {};", cr(bt / 4), fields[bt % 4], value);
+        break;
+    }
 
     // PS3 kernel (LV2) call: r11 = syscall number. Implemented by the runtime.
     case PPC_INST_SC:
