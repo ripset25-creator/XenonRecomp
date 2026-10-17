@@ -10,9 +10,11 @@
 # Copyright (c) 2026 Ned Heller / sp00nznet). They are not copied here: dump_cases.py reads
 # them from your own checkout of ps3recomp. See README.md.
 #
-# Usage: python gen_harness.py cases.json
+# Usage: python gen_harness.py cases.json [extra.json]
 import json, struct, sys
-d = json.load(open(sys.argv[1]))
+d = {"cases": [], "vcases": []}
+for path in sys.argv[1:]:  # cases.json, and optionally extra.json (extra_cases.py)
+    for k, v in json.load(open(path)).items(): d[k] += v
 BASE = 0x10000
 words, funcs = [], []   # funcs: (addr, size, kind, case)
 def add(ws, kind, c):
@@ -68,12 +70,15 @@ for a, s, kind, c in funcs:
         for r, v in c["in_fpr"].items(): H.append(f'    ctx.f{r}.u64 = 0x{v:x}ull;\n')
         for addr, hx in c["in_mem"].items(): H.append(f'    putbytes(0x{int(addr):x}, "{hx}");\n')
         if c["in_ca"] is not None: H.append(f'    ctx.xer.ca = {int(bool(c["in_ca"]))};\n')
+        if c.get("in_so"): H.append('    ctx.xer.so = 1;\n')
         H.append(f'    {fname(a)}(ctx, base);\n')
         for r, v, m in c["expects"]:
             H.append(f'    if ((ctx.r{r}.u64 & 0x{m:x}ull) != (0x{v:x}ull & 0x{m:x}ull)) fail("{n}", "r{r}", ctx.r{r}.u64 & 0x{m:x}ull, 0x{v:x}ull & 0x{m:x}ull);\n')
         for r, v in c["exp_fpr"]: H.append(f'    if (ctx.f{r}.u64 != 0x{v:x}ull) fail("{n}", "f{r}", ctx.f{r}.u64, 0x{v:x}ull);\n')
         for addr, hx in c["exp_mem"].items(): H.append(f'    cmpbytes("{n}", 0x{int(addr):x}, "{hx}");\n')
         if c["exp_ca"] is not None: H.append(f'    if (ctx.xer.ca != {int(bool(c["exp_ca"]))}) fail("{n}", "ca", ctx.xer.ca, {int(bool(c["exp_ca"]))});\n')
+        if c.get("exp_ov") is not None: H.append(f'    if (ctx.xer.ov != {c["exp_ov"]}) fail("{n}", "ov", ctx.xer.ov, {c["exp_ov"]});\n')
+        if c.get("exp_so") is not None: H.append(f'    if (ctx.xer.so != {c["exp_so"]}) fail("{n}", "so", ctx.xer.so, {c["exp_so"]});\n')
         if c["exp_cr"] is not None:
             nib, sh = c["exp_cr"]; fld = (28 - sh) // 4
             H.append(f'    if (crnib(ctx.cr{fld}) != {nib}) fail("{n}", "cr{fld}", crnib(ctx.cr{fld}), {nib});\n')
@@ -83,6 +88,9 @@ for a, s, kind, c in funcs:
         H.append(f'    putbytes(0x8010, "{c["vb_bytes"]}");\n')
         if c["vc_bytes"]: H.append(f'    putbytes(0x8020, "{c["vc_bytes"]}");\n')
         H.append(f'    {fname(a)}(ctx, base);\n    cmpbytes("{n}", 0x8030, "{c["exp_bytes"]}");\n')
+        if c.get("exp_cr") is not None:
+            nib, sh = c["exp_cr"]; fld = (28 - sh) // 4
+            H.append(f'    if (crnib(ctx.cr{fld}) != {nib}) fail("{n}", "cr{fld}", crnib(ctx.cr{fld}), {nib});\n')
     H.append('  }\n')
 H.append('  std::printf("%d cases, %d failures\\n", total, fails);\n  return fails != 0;\n}\n')
 open("harness.cpp", "w").write("".join(H))
