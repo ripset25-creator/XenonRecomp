@@ -3669,6 +3669,9 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 
 { "mulhwu",  XO(31,11,0,0), XO_MASK,	PPC,		{ RT, RA, RB }, PPC_INST_MULHWU },
 { "mulhwu.", XO(31,11,0,1), XO_MASK,	PPC,		{ RT, RA, RB }, PPC_INST_MULHWU },
+/* PS3: bit 21 (OE) is reserved in mulhw/mulhwu and the Cell ignores it */
+{ "mulhwu",  XO(31,11,1,0), XO_MASK,	PPC,		{ RT, RA, RB }, PPC_INST_MULHWU },
+{ "mulhwu.", XO(31,11,1,1), XO_MASK,	PPC,		{ RT, RA, RB }, PPC_INST_MULHWU },
 
 { "isellt",  X(31,15),      X_MASK,	PPCISEL,	{ RT, RA, RB }, PPC_INST_ISELLT },
 { "iselgt",  X(31,47),      X_MASK,	PPCISEL,	{ RT, RA, RB }, PPC_INST_ISELGT },
@@ -3764,6 +3767,8 @@ const struct powerpc_opcode powerpc_opcodes[] = {
 
 { "mulhw",   XO(31,75,0,0), XO_MASK,	PPC,		{ RT, RA, RB }, PPC_INST_MULHW },
 { "mulhw.",  XO(31,75,0,1), XO_MASK,	PPC,		{ RT, RA, RB }, PPC_INST_MULHW },
+{ "mulhw",   XO(31,75,1,0), XO_MASK,	PPC,		{ RT, RA, RB }, PPC_INST_MULHW },
+{ "mulhw.",  XO(31,75,1,1), XO_MASK,	PPC,		{ RT, RA, RB }, PPC_INST_MULHW },
 
 { "dlmzb",   XRC(31,78,0),  X_MASK,	PPC403 | PPC440,	{ RA, RS, RB }, PPC_INST_DLMZB },
 { "dlmzb.",  XRC(31,78,1),  X_MASK,	PPC403 | PPC440,	{ RA, RS, RB }, PPC_INST_DLMZB },

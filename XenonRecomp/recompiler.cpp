@@ -570,6 +570,63 @@ bool Recompiler::Recompile(
     if (id == PPC_INST_VUPKHSB128 && insn.operands[2] == 0x60) id = PPC_INST_VUPKHSH128;
     else if (id == PPC_INST_VUPKLSB128 && insn.operands[2] == 0x60) id = PPC_INST_VUPKLSH128;
 
+    // PS3: OE forms (addo, subfeo, mullwo, divwo...) compute the same result as the base
+    // instruction and also set XER[OV] (and the sticky XER[SO]). OV is computed from the inputs
+    // before the base instruction runs, since rD may be one of them. Cell user code runs in
+    // 64-bit mode, so OV comes from the 64-bit result, except for the word multiply/divide forms.
+    std::string overflow;
+    {
+        // Only touch the operands an OE form actually has: r() marks the register as used
+        bool isOE = false;
+        switch (id)
+        {
+        case PPC_INST_ADDO: case PPC_INST_ADDCO: case PPC_INST_ADDEO: case PPC_INST_ADDZEO: case PPC_INST_ADDMEO:
+        case PPC_INST_SUBFO: case PPC_INST_SUBFCO: case PPC_INST_SUBFEO: case PPC_INST_SUBFZEO: case PPC_INST_SUBFMEO:
+        case PPC_INST_NEGO: case PPC_INST_MULLWO: case PPC_INST_MULLDO:
+        case PPC_INST_DIVWO: case PPC_INST_DIVWUO: case PPC_INST_DIVDO: case PPC_INST_DIVDUO:
+            isOE = true;
+            break;
+        }
+        const bool hasRB = isOE && id != PPC_INST_ADDZEO && id != PPC_INST_ADDMEO && id != PPC_INST_SUBFZEO && id != PPC_INST_SUBFMEO && id != PPC_INST_NEGO;
+        std::string ra = isOE ? fmt::format("{}", r(insn.operands[1])) : "";
+        std::string rb = hasRB ? fmt::format("{}", r(insn.operands[2])) : "";
+        std::string ca = isOE ? fmt::format("{}.ca", xer()) : "";
+        auto add = [&](std::string x, std::string y, std::string c)
+            {
+                // Signed overflow of x + y + c: both inputs differ in sign from the result
+                return fmt::format("((({0} ^ ({0} + {1} + {2})) & ({1} ^ ({0} + {1} + {2}))) >> 63)", x, y, c);
+            };
+        switch (id)
+        {
+        case PPC_INST_ADDO: id = PPC_INST_ADD; overflow = add(ra + ".u64", rb + ".u64", "0"); break;
+        case PPC_INST_ADDCO: id = PPC_INST_ADDC; overflow = add(ra + ".u64", rb + ".u64", "0"); break;
+        case PPC_INST_ADDEO: id = PPC_INST_ADDE; overflow = add(ra + ".u64", rb + ".u64", ca); break;
+        case PPC_INST_ADDZEO: id = PPC_INST_ADDZE; overflow = add(ra + ".u64", "0ull", ca); break;
+        case PPC_INST_ADDMEO: id = PPC_INST_ADDME; overflow = add(ra + ".u64", "~0ull", ca); break;
+        case PPC_INST_SUBFO: id = PPC_INST_SUBF; overflow = add("~" + ra + ".u64", rb + ".u64", "1"); break;
+        case PPC_INST_SUBFCO: id = PPC_INST_SUBFC; overflow = add("~" + ra + ".u64", rb + ".u64", "1"); break;
+        case PPC_INST_SUBFEO: id = PPC_INST_SUBFE; overflow = add("~" + ra + ".u64", rb + ".u64", ca); break;
+        case PPC_INST_SUBFZEO: id = PPC_INST_SUBFZE; overflow = add("~" + ra + ".u64", "0ull", ca); break;
+        case PPC_INST_SUBFMEO: id = PPC_INST_SUBFME; overflow = add("~" + ra + ".u64", "~0ull", ca); break;
+        case PPC_INST_NEGO: id = PPC_INST_NEG; overflow = fmt::format("({}.u64 == 0x8000000000000000ull)", ra); break;
+        case PPC_INST_MULLWO: id = PPC_INST_MULLW; overflow = fmt::format("(int64_t({0}.s32) * int64_t({1}.s32) != int64_t(int32_t(int64_t({0}.s32) * int64_t({1}.s32))))", ra, rb); break;
+        case PPC_INST_MULLDO: id = PPC_INST_MULLD; overflow = fmt::format("__builtin_mul_overflow({}.s64, {}.s64, &product)", ra, rb); break;
+        case PPC_INST_DIVWO: id = PPC_INST_DIVW; overflow = fmt::format("({1}.s32 == 0 || ({0}.s32 == INT32_MIN && {1}.s32 == -1))", ra, rb); break;
+        case PPC_INST_DIVWUO: id = PPC_INST_DIVWU; overflow = fmt::format("({}.u32 == 0)", rb); break;
+        case PPC_INST_DIVDO: id = PPC_INST_DIVD; overflow = fmt::format("({1}.s64 == 0 || ({0}.s64 == INT64_MIN && {1}.s64 == -1))", ra, rb); break;
+        case PPC_INST_DIVDUO: id = PPC_INST_DIVDU; overflow = fmt::format("({}.u64 == 0)", rb); break;
+        }
+        if (!overflow.empty())
+        {
+            println("	{{");
+            if (id == PPC_INST_MULLD)
+                println("	int64_t product;");
+            println("	uint8_t overflow = {};", overflow);
+        }
+    }
+
+    const size_t outStart = out.size();
+
     switch (id)
     {
     case PPC_INST_ADD:
@@ -1397,7 +1454,8 @@ bool Recompiler::Recompile(
         break;
 
     case PPC_INST_NEG:
-        println("\t{}.s64 = -{}.s64;", r(insn.operands[0]), r(insn.operands[1]));
+        // Unsigned: negating INT64_MIN is undefined behaviour on signed integers
+        println("\t{}.u64 = 0 - {}.u64;", r(insn.operands[0]), r(insn.operands[1]));
         if (strchr(insn.opcode->name, '.'))
             println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
@@ -1456,7 +1514,9 @@ bool Recompiler::Recompile(
     case PPC_INST_RLWIMI:
     {
         const uint64_t mask = ComputeMask(insn.operands[3] + 32, insn.operands[4] + 32);
-        println("\t{}.u64 = (__builtin_rotateleft32({}.u32, {}) & 0x{:X}) | ({}.u64 & 0x{:X});", r(insn.operands[0]), r(insn.operands[1]), insn.operands[2], mask, r(insn.operands[0]), ~mask);
+        // PS3: in 64-bit mode the 32-bit rotate is replicated into the high word; a wrapping mask
+        // (mb > me) keeps those bits
+        println("\t{}.u64 = (__builtin_rotateleft64({}.u32 | ({}.u64 << 32), {}) & 0x{:X}) | ({}.u64 & 0x{:X});", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[1]), insn.operands[2], mask, r(insn.operands[0]), ~mask);
         break;
     }
 
@@ -1472,6 +1532,12 @@ bool Recompiler::Recompile(
 
     case PPC_INST_ROTLW:
         println("\t{}.u64 = __builtin_rotateleft32({}.u32, {}.u8 & 0x1F);", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[2]));
+        break;
+
+    case PPC_INST_RLWNM:
+        println("\t{}.u64 = __builtin_rotateleft64({}.u32 | ({}.u64 << 32), {}.u8 & 0x1F) & 0x{:X};", r(insn.operands[0]), r(insn.operands[1]), r(insn.operands[1]), r(insn.operands[2]), ComputeMask(insn.operands[3] + 32, insn.operands[4] + 32));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
         break;
 
     case PPC_INST_ROTLWI:
@@ -1825,8 +1891,9 @@ bool Recompiler::Recompile(
 
     case PPC_INST_VCMPGTSH:
         println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_cmpgt_epi16(simde_mm_load_si128((simde__m128i*){}.s16), simde_mm_load_si128((simde__m128i*){}.s16)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        // Byte mask: with 32-bit lanes a lane with only its high halfword set would count as all set
         if (strchr(insn.opcode->name, '.'))
-            println("\t{}.setFromMask(simde_mm_load_ps({}.f32), 0xF);", cr(6), v(insn.operands[0]));
+            println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", cr(6), v(insn.operands[0]));
         break;
 
     case PPC_INST_VCMPBFP:
@@ -1996,12 +2063,35 @@ bool Recompiler::Recompile(
             println("\t{}.setFromMask(simde_mm_load_ps({}.f32), 0xF);", cr(6), v(insn.operands[0]));
         break;
 
+    case PPC_INST_VCMPGTSB:
+        println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_cmpgt_epi8(simde_mm_load_si128((simde__m128i*){}.s8), simde_mm_load_si128((simde__m128i*){}.s8)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", cr(6), v(insn.operands[0]));
+        break;
+
+    case PPC_INST_VCMPEQUH:
+        println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_cmpeq_epi16(simde_mm_load_si128((simde__m128i*){}.u16), simde_mm_load_si128((simde__m128i*){}.u16)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", cr(6), v(insn.operands[0]));
+        break;
+
+    case PPC_INST_VCMPGTUW:
+        // Unsigned compare: flip the sign bits and compare signed
+        println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_cmpgt_epi32(simde_mm_xor_si128(simde_mm_load_si128((simde__m128i*){}.u32), simde_mm_set1_epi32(INT32_MIN)), simde_mm_xor_si128(simde_mm_load_si128((simde__m128i*){}.u32), simde_mm_set1_epi32(INT32_MIN))));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", cr(6), v(insn.operands[0]));
+        break;
+
     case PPC_INST_VCMPGTUB:
         println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_cmpgt_epu8(simde_mm_load_si128((simde__m128i*){}.u8), simde_mm_load_si128((simde__m128i*){}.u8)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", cr(6), v(insn.operands[0]));
         break;
 
     case PPC_INST_VCMPGTUH:
         println("\tsimde_mm_store_si128((simde__m128i*){}.u8, simde_mm_cmpgt_epu16(simde_mm_load_si128((simde__m128i*){}.u16), simde_mm_load_si128((simde__m128i*){}.u16)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", cr(6), v(insn.operands[0]));
         break;
 
     case PPC_INST_VEXPTEFP:
@@ -2416,6 +2506,8 @@ bool Recompiler::Recompile(
 
     case PPC_INST_VCMPGTSW:
         println("\tsimde_mm_store_si128((simde__m128i*){}.s32, simde_mm_cmpgt_epi32(simde_mm_load_si128((simde__m128i*){}.s32), simde_mm_load_si128((simde__m128i*){}.s32)));", v(insn.operands[0]), v(insn.operands[1]), v(insn.operands[2]));
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.setFromMask(simde_mm_load_si128((simde__m128i*){}.u8), 0xFFFF);", cr(6), v(insn.operands[0]));
         break;
 
     case PPC_INST_VRLW:
@@ -2626,11 +2718,52 @@ bool Recompiler::Recompile(
         return false;
     }
 
+    // PS3: record forms (Rc = 1) of integer instructions whose case above does not set cr0.
+    // cr0 comes from the 64-bit result, like the other record forms.
+    if (strchr(insn.opcode->name, '.') && out.find("cr0", outStart) == std::string::npos)
+    {
+        switch (id)
+        {
+        case PPC_INST_CLRLDI:
+        case PPC_INST_CNTLZD:
+        case PPC_INST_CNTLZW:
+        case PPC_INST_DIVD:
+        case PPC_INST_MULHD:
+        case PPC_INST_MULHDU:
+        case PPC_INST_MULHW:
+        case PPC_INST_MULHWU:
+        case PPC_INST_MULLD:
+        case PPC_INST_NAND:
+        case PPC_INST_NOR:
+        case PPC_INST_ORC:
+        case PPC_INST_RLDIC:
+        case PPC_INST_RLDIMI:
+        case PPC_INST_RLWIMI:
+        case PPC_INST_ROTLD:
+        case PPC_INST_ROTLDI:
+        case PPC_INST_ROTLW:
+        case PPC_INST_SLD:
+        case PPC_INST_SRAD:
+        case PPC_INST_SRADI:
+        case PPC_INST_SRD:
+            println("\t{}.compare<int64_t>({}.s64, 0, {});", cr(0), r(insn.operands[0]), xer());
+            break;
+        }
+    }
+
+    if (!overflow.empty())
+    {
+        println("\t{}.ov = overflow;", xer());
+        println("\t{}.so |= overflow;", xer());
+        if (strchr(insn.opcode->name, '.'))
+            println("\t{}.so = {}.so;", cr(0), xer());
+        println("\t}}");
+    }
+
 #if 1
     if (strchr(insn.opcode->name, '.'))
     {
-        int lastLine = out.find_last_of('\n', out.size() - 2);
-        if (out.find("cr0", lastLine + 1) == std::string::npos && out.find("cr6", lastLine + 1) == std::string::npos)
+        if (out.find("cr0", outStart) == std::string::npos && out.find("cr1", outStart) == std::string::npos && out.find("cr6", outStart) == std::string::npos)
             fmt::println("{} at {:X} has RC bit enabled but no comparison was generated", insn.opcode->name, base);
     }
 #endif
